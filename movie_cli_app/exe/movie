@@ -1,0 +1,202 @@
+#!/usr/bin/env ruby
+require 'open-uri'
+require 'uri'
+require 'optparse'
+require 'terminal-table'
+require 'json'
+require 'rack'
+require 'net/http'
+require 'dotenv'
+require 'dotenv/load'
+require 'date'
+Dotenv.load('../.env')
+
+
+class Parsing
+  attr_accessor :options , :extras
+  @@apikey  = ENV['TOKEN']
+
+ 
+  def initialize(option,extra)
+    @options = option
+    @extras = extra
+  end
+  
+  def query_building
+  
+    #Preparing API URL with values passed as arguments
+    base_url = "https://www.omdbapi.com/"
+    uri = URI(base_url)
+    
+    # Checking if any of Movie name or imbd_id is present
+    if !(@options&.has_key?(:title)) && !(@options&.has_key?(:id)) 
+      puts "You need to enter Movie name or it's IMDB id"
+      puts "PLease try again"
+      exit
+    else
+      query = {
+        'apikey':  @@apikey,
+        's':       @options[:'title'],
+        'i':       @options[:'id'],
+        'year':    @options[:'year'],
+        'type':    @options[:'type'],
+        'page':    @options[:'page']
+        }.compact!
+
+    # build a simple query and reject params where the value is not given
+    uri.query = Rack::Utils.build_query(query) unless query.empty?
+
+    # making API call and parsing the response
+    response = Net::HTTP.get_response(uri).body
+    data_hash = JSON.parse(response)
+    end
+    if data_hash["Response"] != "True"
+      puts "Something went wrong please try again"
+      exit
+    else 
+      return data_hash
+    end
+  end
+
+
+
+  def create_table_heading
+    # creating table using terminal table gem
+    table = Terminal::Table.new
+
+    # Preparing heading of the table
+    heads = ['Title', 'Year', 'Type', 'imdb_id']
+
+    # creating heading if there are extra arguments passed
+    @extras&.each do |values|
+      heads << values
+    end
+
+    # appending the heading in table
+    table.headings = heads
+    return table
+  end
+
+  def get_rows_with_id(data)
+    rows = [[data['Title'], data['Year'], data['Type'], data['imdbID']]]
+
+      @extras&.each do |value|
+        rows.push([data[value]])
+      end
+      return rows
+  end
+
+  def get_rows_with_title()
+
+  end
+
+
+  def create_table(data_hash)
+    #fetching the table headings 
+    table = create_table_heading
+    
+    # array for different imdbId 
+    ids = []
+
+    #time start
+    starting = Time.now
+
+    # if id is present just print it using the id
+    if @options[:id]
+    
+      rows = get_rows_with_id(data_hash)
+    
+      table.rows = rows
+    
+    
+    # else looking for title, then if year is present using the year to check if it matches  
+    elsif @options[:title]
+      # storing ids of all movies from search (&s=<movie_title>)
+      data_hash['Search'].each do |x|
+
+        ids << x['imdbID']
+      end
+    
+      url_id = "https://www.omdbapi.com/?apikey=#@@apikey"
+    
+      ids.each do |id|
+        temp_url = URI(url_id + "&i=" +id)
+        file_id = Net::HTTP.get_response(temp_url).body
+        movie_id = JSON.parse(file_id)
+
+        if @options[:year]
+          if @options[:year] == movie_id['Year']
+            rows = [movie_id['Title'], movie_id['Year'], movie_id['Type'], movie_id['imdbID']]
+
+            # adding extras
+            @extras&.each do |value|
+              rows << movie_id[value]
+
+            end
+          
+            table << rows
+          end
+        
+        else 
+          rows = [movie_id['Title'], movie_id['Year'], movie_id['Type'], movie_id['imdbID']]
+
+          # adding extras values
+          @extras&.each do |value|
+            rows << movie_id[value]
+          end
+
+          table << rows
+        end
+      end
+    end
+
+    # time end
+    ending = Time.now
+
+    elapsed = ending - starting
+
+    puts table
+
+    # printing time taken
+
+    puts "\n"
+    puts "Time taken: #{elapsed} seconds"
+    puts "\n"
+   
+  end
+end
+
+
+
+
+
+# Parsing the arguments passed to the command
+options = {}
+
+extras = []
+
+parser = OptionParser.new do |parser|
+  parser.banner = "Usage: movie [options]"
+  parser.on("-n", "--title TITLE", "Replacement for Movie's name") 
+  parser.on("-i", "--id ID", "Replacement for Movie's imdb Id") 
+  parser.on("-y", "--year YEAR", "Replacement for Movie's Release year") 
+  parser.on("-t", "--type TYPE", "Replacement for Movie's Type (movie/series/episode)") 
+  parser.on("-p", "--page NAME", "Replacement for page number to be returned")
+  parser.on("-e", "--extra EXTRA", "Replacement for extra params") do |element|
+    extras.push(element)
+  end
+  # adding support for the --help arugment
+  parser.on("-h", "--help", "Prints help") do 
+    puts parser
+    exit
+  end
+end
+parser.parse!(into: options)
+
+
+
+obj = Parsing.new(options,extras)
+
+data = obj.query_building
+
+obj.create_table(data)
