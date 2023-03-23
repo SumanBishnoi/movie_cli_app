@@ -3,8 +3,8 @@ require_relative 'lib/movie/version'
 Gem::Specification.new do |spec|
   spec.name          = "movie"
   spec.version       = Movie::VERSION
-  spec.authors       = ["Suman0029"]
-  spec.email         = ["int-suman.bishnoi@1mg.com"]
+  spec.authors       = ["SumanBIshnoi"]
+  spec.email         = ["your-email@work.com"]
 
   spec.summary       = %q{This is a gem for fetching movie data }
   spec.description   = %q{This gem contain useful features}
